@@ -1,1 +1,37 @@
+# Frozen Experimental Protocol (Gate G2 / Gate G3)
+project: "Context-Window Degradation and Its Impact on Long-Document Research Synthesis"
+student_id: "PSE2026002"
+seed: 42
 
+hardware:
+  platform: "Google Colab"
+  gpu: "NVIDIA Tesla T4 (14.56 GB VRAM)"
+  precision: "float16"
+
+models:
+  generator_llm: "Qwen/Qwen2.5-3B-Instruct"
+  dense_retriever: "BAAI/bge-small-en-v1.5"
+  nli_verifier: "cross-encoder/nli-deberta-v3-small"
+
+decoding:
+  do_sample: false
+  max_new_tokens: 300  # Increased from 180 based on Week 1 truncation audit
+
+dataset:
+  source: "qiaojin/PubMedQA (pqa_labeled)"
+  pilot_clusters: 5     # Gate G2 validation run
+  full_clusters: 20     # Gate G3 full evaluation run
+  corpus_sizes_k: [5, 15, 25]
+  target_positions: ["start", "middle", "end"]
+
+systems_compared:
+  - "Baseline_1_FullContext"     # Uncalibrated full-context prompt
+  - "Baseline_2_DenseRAG"        # Top-4 dense retrieval without edge reordering
+  - "Proposed_Fig2_Verified"     # Edge-salience reordering + DeBERTa NLI claim verification
+
+metrics:
+  - "headline_recall_pct"        # Primary finding coverage (higher is better)
+  - "h1_qualifier_recall_pct"    # Mid-document qualifier retention (higher is better)
+  - "h4_contradiction_pct"       # Conflicting finding detection rate (higher is better)
+  - "h3_nli_faithfulness_pct"    # Citation entailment precision (higher is better)
+  - "latency_sec"                # Wall-clock inference time (lower is better)
