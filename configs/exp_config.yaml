@@ -1,0 +1,28 @@
+experiment:
+  name: "AITR_Lab02_ContextDegradation"
+  seed: 42
+  output_dir: "results"
+
+models:
+  - name: "gpt-4o-mini"
+    provider: "openai"
+    temperature: 0.0
+    max_tokens: 1024
+  - name: "claude-3-5-sonnet-20241022"
+    provider: "anthropic"
+    temperature: 0.0
+    max_tokens: 1024
+
+evaluation:
+  context_lengths: [4096, 16384, 32768, 65536]
+  evidence_positions: [0.0, 0.25, 0.50, 0.75, 1.0]
+  distractor_ratios: [0.0, 0.5, 0.8, 0.95]
+  prompt_modes:
+    - "standard_synthesis"
+    - "evidence_aware_synthesis"
+
+metrics:
+  - "claim_recall"
+  - "citation_precision"
+  - "citation_f1"
+  - "hallucination_rate"
