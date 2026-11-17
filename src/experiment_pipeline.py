@@ -162,46 +162,71 @@ def make_stimulus_clusters(groups: dict[str, list[dict[str, Any]]],
     return clusters
 
 
-def assemble_prompt_docs(contexts, max_tokens=3000):
+def assemble_prompt_docs(cluster: dict[str, Any], k: int, position: str) -> list[dict[str, Any]]:
+    """Assemble exactly k documents with the positive/negative target pair at a controlled position.
+
+    The two target documents remain adjacent so their relative order is fixed;
+    only the pair's position within the larger context changes.
     """
-    Assembles and filters prompt context documents, ensuring all required 
-    metadata keys (like 'role') are present to prevent KeyErrors.
-    """
-    assembled = []
-    total_tokens = 0
+    distractors = cluster["distractors"][:k - 2]
+    if len(distractors) != k - 2:
+        raise ValueError(
+            f"Cluster {cluster.get('cluster_id', '<unknown>')} has only "
+            f"{len(distractors)} distractors; {k - 2} are required for k={k}."
+        )
 
-    for idx, ctx in enumerate(contexts):
-        # Ensure ctx is a dictionary and safely handle missing keys
-        if isinstance(ctx, str):
-            doc_item = {
-                "id": f"doc_{idx}",
-                "text": ctx,
-                "role": "context",  # Safe default role
-                "token_count": len(ctx.split())  # Approximate if tokenizer not passed
-            }
-        elif isinstance(ctx, dict):
-            # Fallback for role if missing from incoming dict
-            role = ctx.get("role") or ctx.get("type") or "context"
-            text = ctx.get("text") or ctx.get("content", "")
-            doc_id = ctx.get("id", f"doc_{idx}")
-            
-            doc_item = {
-                "id": doc_id,
-                "text": text,
-                "role": role,  # Guaranteed 'role' key exists
-                "token_count": ctx.get("token_count", len(text.split()))
-            }
-        else:
-            continue
+    pair = [
+        {
+            "text": cluster["paper_pos"],
+            "role": "positive_target",
+            "source_id": cluster["positive_source_id"],
+        },
+        {
+            "text": cluster["paper_neg"],
+            "role": "contradictory_target",
+            "source_id": cluster["negative_source_id"],
+        },
+    ]
 
-        # Optional token budget check
-        if total_tokens + doc_item["token_count"] > max_tokens:
-            break
+    if position == "start":
+        ordered = pair + distractors
+    elif position == "end":
+        ordered = distractors + pair
+    elif position == "middle":
+        midpoint = len(distractors) // 2
+        ordered = distractors[:midpoint] + pair + distractors[midpoint:]
+    else:
+        raise ValueError(
+            f"Unknown target position: {position!r}. "
+            "Expected 'start', 'middle', or 'end'."
+        )
 
-        assembled.append(doc_item)
-        total_tokens += doc_item["token_count"]
+    docs = [
+        {
+            "doc_id": i,
+            "text": item["text"],
+            "role": item["role"],
+            "source_id": item["source_id"],
+        }
+        for i, item in enumerate(ordered, start=1)
+    ]
+    if len(docs) != k:
+        raise AssertionError(f"Expected {k} documents, assembled {len(docs)}.")
 
-    return assembled
+    positive_index = next(i for i, doc in enumerate(docs)
+                          if doc["role"] == "positive_target")
+    negative_index = next(i for i, doc in enumerate(docs)
+                          if doc["role"] == "contradictory_target")
+    if negative_index != positive_index + 1:
+        raise AssertionError("Positive and contradictory targets must remain adjacent.")
+    if position == "start" and positive_index != 0:
+        raise AssertionError("Target pair is not at the start.")
+    if position == "end" and positive_index != k - 2:
+        raise AssertionError("Target pair is not at the end.")
+    if position == "middle" and positive_index != (k - 2) // 2:
+        raise AssertionError("Target pair is not at the middle.")
+
+    return docs
 
 def load_models() -> dict[str, Any]:
     device = "cuda" if torch.cuda.is_available() else "cpu"
