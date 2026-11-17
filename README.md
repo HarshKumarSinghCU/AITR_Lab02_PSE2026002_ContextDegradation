@@ -15,7 +15,7 @@ The factorial design contains 5 pilot clusters (135 records) or 15 extended-run 
 
 1. **Baseline 1 — Full Context:** all documents in their original order.
 2. **Baseline 2 — Dense RAG:** top four passages selected by BGE dense retrieval.
-3. **Proposed Figure 2:** dense ranking, alternating edge-salience ordering, generation, and DeBERTa NLI verification over the two top-ranked studies. Low verification triggers focused regeneration.
+3. **Proposed Figure 2:** dense ranking, alternating edge-salience ordering, generation, and DeBERTa NLI verification. Regeneration is triggered by missing/invalid sentence citations or a cited-claim contradiction score of at least 0.25.
 
 The stimulus builder uses PubMedQA `pqa_labeled` records as source material. Study B includes an explicitly marked *synthetic contradictory replication*. Its contradiction sentence and illustrative p-value are experimental counterfactuals, not published findings.
 
@@ -59,7 +59,7 @@ Use `--clusters 15` for the extended 405-condition run when the Colab quota perm
 
 The experiment writes `results/experiment_results.csv`, `results/summary_metrics.csv`, and `results/run_metadata.json`. The plotter generates figures only from the measured run-level CSV.
 
-Metrics are headline keyword recall, binary H1 qualifier retention, binary H4 contradiction-marker detection, H3 NLI citation faithfulness, and system wall-clock latency. H1/H4 are lexical proxies, not semantic judgements; NLI scores are not calibrated probabilities.
+Metrics are headline keyword recall, binary H1 qualifier retention, binary H4 contradiction-marker detection, H3 NLI citation faithfulness, and system wall-clock latency. H1/H4 are lexical proxies, not semantic judgements. H3 evaluates citations only against documents actually supplied to the relevant system; grouped citations such as [Doc 1, Doc 2] are parsed, and citation tags are removed before NLI scoring. NLI scores are not calibrated probabilities.
 
 ## Status and research integrity
 
