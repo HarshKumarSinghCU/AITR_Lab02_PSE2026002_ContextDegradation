@@ -1,32 +1,68 @@
-# AITR_Lab02_PSE2026002_ContextDegradation
-Empirical evaluation of context-window degradation (H1, H3, H4) and evidence-aware synthesis (Figure 2)
 # Empirical Evaluation of Context-Window Degradation in Multi-Document Research Synthesis
 
 **Author:** Harsh Kumar Singh (`PSE2026002`), IIIT Allahabad  
-**Course:** AI Tools for Research (Post-Mid-Sem Implementation Study)
+**Course:** AI Tools for Research — Post-Mid-Sem Implementation Study
 
-## 1. Research Question
-In multi-document scientific synthesis, how do corpus scale ($k \in \{5, 15, 25\}$) and target evidence position ($p \in \{\text{start, middle, end}\}$) affect mid-document methodological qualifier retention ($H_1$) and contradiction detection ($H_4$), and to what extent does combining edge-salience reordering with claim-level NLI verification (`Proposed_Fig2_Verified`) mitigate these failures?
+This repository contains a controlled study of context-window degradation in multi-document scientific synthesis.
 
-## 2. Verified Environment & Dependencies
-- **Hardware:** Google Colab NVIDIA Tesla T4 GPU (`14.56 GB VRAM`)
-- **Software:** Python `3.13.16`, PyTorch `2.14.1+cu130`, Transformers `5.22.1`, Sentence-Transformers
-- **Models:** `Qwen/Qwen2.5-3B-Instruct` (generator), `BAAI/bge-small-en-v1.5` (retriever), `cross-encoder/nli-deberta-v3-small` (verifier)
-- **Dataset:** `qiaojin/PubMedQA` (`pqa_labeled` split via HuggingFace `datasets`, MIT/Apache-2.0)
+## Research question
 
-## 3. Repository Structure
-- `configs/exp_config.yaml` — Frozen experimental parameters (`seed=42`, `do_sample=False`, `max_new_tokens=300`)
-- `notebooks/` — Executed Google Colab notebooks (Week 1 sanity check & 135-run factorial sweep)
-- `results/` — Genuine experimental outputs (`week1_sanity_output.json`, `experiment_results.csv`, `summary_metrics.csv`, PDF/PNG plots)
-- `paper/main.tex` — Complete two-column LaTeX manuscript with embedded vector figures and 33 verified references
-- `research_decisions.md`, `baseline_validation.md`, `ai_assistance_log.md` — Provenance and audit logs
+How do corpus scale (`k ∈ {5, 15, 25}`) and target-evidence position (`start, middle, end`) affect H1 methodological-qualifier retention and H4 contradiction detection? To what extent can edge-salience ordering and claim-level NLI verification mitigate these failures?
 
-## 4. Reproduction Instructions
+## Experimental design
+
+The factorial design contains 5 pilot clusters (135 records) or 15 extended-run clusters (405 records), with three corpus sizes, three positions, and three systems.
+
+1. **Baseline 1 — Full Context:** all documents in their original order.
+2. **Baseline 2 — Dense RAG:** top four passages selected by BGE dense retrieval.
+3. **Proposed Figure 2:** dense ranking, alternating edge-salience ordering, generation, and DeBERTa NLI verification over the two top-ranked studies. Low verification triggers focused regeneration.
+
+The stimulus builder uses PubMedQA `pqa_labeled` records as source material. Study B includes an explicitly marked *synthetic contradictory replication*. Its contradiction sentence and illustrative p-value are experimental counterfactuals, not published findings.
+
+## Repository map
+
+```text
+configs/exp_config.yaml
+data/README.md
+src/experiment_pipeline.py
+scripts/env_sanity_check.py
+scripts/run_factorial_experiment.py
+scripts/plot_from_csv.py
+notebooks/colab_experiment_runner.ipynb
+paper/main.tex
+paper/references.bib
+results/README.md
+research_decisions.md
+baseline_validation.md
+ai_assistance_log.md
+REPRODUCIBILITY_AUDIT.md
+tests/test_experiment_pipeline.py
+```
+
+## Reproduce in Google Colab
+
+Select **Runtime → Change runtime type → T4 GPU**, then run:
+
 ```bash
+git clone --branch feat/reproducible-experiment-pipeline https://github.com/HarshKumarSinghCU/AITR_Lab02_PSE2026002_ContextDegradation.git
+cd AITR_Lab02_PSE2026002_ContextDegradation
 pip install -r requirements.txt
-# 1. Run 2-condition sanity check (takes ~60s on T4 GPU)
-python scripts/week1_sanity_check.py
-# 2. Run 135-run factorial experiment (takes ~8 mins on T4 GPU)
-python scripts/run_factorial_experiment.py
-# 3. Regenerate plots on CPU from saved summary metrics (takes 2s on CPU)
+python scripts/env_sanity_check.py
+python -m unittest discover -s tests -v
+python scripts/run_factorial_experiment.py --clusters 5
 python scripts/plot_from_csv.py
+```
+
+Use `--clusters 15` for the extended 405-condition run when the Colab quota permits. The first run downloads the selected model weights and PubMedQA data.
+
+## Outputs and metrics
+
+The experiment writes `results/experiment_results.csv`, `results/summary_metrics.csv`, and `results/run_metadata.json`. The plotter generates figures only from the measured run-level CSV.
+
+Metrics are headline keyword recall, binary H1 qualifier retention, binary H4 contradiction-marker detection, H3 NLI citation faithfulness, and system wall-clock latency. H1/H4 are lexical proxies, not semantic judgements; NLI scores are not calibrated probabilities.
+
+## Status and research integrity
+
+The original repository contained one-byte placeholders for the core Python files and did not include the advertised run-level results. This branch adds the implementation and reproducibility materials, but the new code has **not** been run on Colab in this repository-editing session. Historical pilot observations remain in `baseline_validation.md` and are not independently revalidated by this update.
+
+Run the notebook, inspect the actual condition count and document manifest, and commit the measured artifacts before claiming updated findings. Do not describe Study B's synthetic counterfactual as a real publication.

@@ -25,3 +25,16 @@
 | Phase II | Day-One Sanity Script ($k=5$) | AI generated `Qwen2.5-3B-Instruct` script with `torch_dtype` and `max_new_tokens=180`. | Executed on Colab T4 GPU (`14.56 GB`). Observed: (1) `torch_dtype` deprecation warning in `transformers 5.22.1`, (2) output truncation at 180 tokens, and (3) $k=5$ fell inside $L_{\text{eff}}$. | Fixed `dtype=torch.float16`, raised `max_new_tokens=300`, and scaled $k \in \{5, 15, 25\}$. |
 | Phase III | 135-Run Factorial Experiment | AI generated automated evaluation including regex citation parsing and strict `NLI >= 0.45` scoring. | Executed all 135 runs on T4 GPU. Inspected real CSV and identified why `h3_nli_faithfulness_pct` scored `0.0` in 26/27 cells: model output grouped citations (`[Doc 1, Doc 2]`) and paraphrased across papers, causing strict NLI thresholding to trigger fallback re-synthesis on every query (doubling latency to ~26s). | Documented exact diagnostic finding in `baseline_validation.md` and Section 5.3 of the manuscript without fabricating or hiding numbers. |
 | Phase IV | Compute Limit Handling | Proposed scaling to `N_CLUSTERS = 15` (405 runs). | Colab T4 GPU usage limit was reached after completing the 135-run factorial dataset. Decided to freeze the verified 135-run dataset rather than fabricating unexecuted runs. | Reported 135-run results and compute constraints transparently in paper Section 6. |
+
+
+
+## 2. Repository implementation update (18 November 2026)
+
+| Stage | Task | AI Tool | Human Verification / Action | Outcome |
+|---|---|---|---|---|
+| Repository audit | Inspected existing Git tree and compared it with the supplied 64-page assignment/workspace PDF. | ChatGPT | Repository tree inspection found one-byte placeholders for the core environment and experiment scripts and no run-level result files. The PDF's controlled cluster construction and three-system design were used as implementation requirements. | Documented missing implementation and added an implementation branch. |
+| Controlled benchmark | Added PubMedQA loading, deterministic positive/negative target-pair construction, topical distractors, and start/middle/end placement. | ChatGPT | Human execution and review are pending. Study B's inserted contradiction is disclosed as synthetic benchmark content, not a published finding. | Implementation committed; not yet executed on Colab. |
+| Comparative systems | Added Full Context, top-4 Dense RAG, and Figure 2 edge-salience + NLI verification systems. | ChatGPT | Human comparison against the assignment and inspection of generated CSV are pending. | Implementation committed; output validation pending. |
+| Reproducibility materials | Added environment check, CLI launcher, CSV plotting utility, and Colab notebook. | ChatGPT | Notebook execution, package/version check, and GPU validation are pending. No newly measured values are claimed. | Documentation and launch artifacts committed; execution pending. |
+
+The repository update has not been executed on a Colab T4 GPU in this session. The experiment result CSV, plots, and final manuscript must be generated/checked from an actual run before being presented as completed experimental findings.
