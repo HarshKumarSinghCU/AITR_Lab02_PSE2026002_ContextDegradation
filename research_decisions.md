@@ -1,11 +1,23 @@
-# Research Decisions Log (`research_decisions.md`)
+# Research Decisions Log
 
-**Student:** Harsh Kumar Singh (`PSE2026002`), IIIT Allahabad
-**Project:** Context-Window Degradation and Its Impact on Long-Document Research Synthesis
-**Repository:** `AITR_Lab02_PSE2026002_ContextDegradation`
+**Project:** Context-Window Degradation and Its Impact on Long-Document Research Synthesis  
+**Student ID:** PSE2026002  
+**Institution:** IIIT Allahabad
 
-| ID | Decision | Reason | Source / Evidence | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| D-01 | Focus experimental study on Hypotheses H1 (mid-document qualifier loss) and H4 (contradiction smoothing) under controlled positional shifts. | Directly tests unmeasured synthesis failure modes identified in our critical review while separating position ($p$) from distractor count ($d$). | Updated Review Paper, Section 7 (pp. 12–13) & Table 4 (p. 15) | VERIFIED (Literature) |
-| D-02 | Use Pathway B + C (Controlled factorial comparison + Figure 2 edge-reordering & claim-level verification). | Avoids prohibitive pre-training costs while directly evaluating the evidence-aware pipeline proposed in Figure 2 of our review. | Assignment Handout Sec. 3 (p. 2); Review Paper Sec. 8.1 & Fig. 2 (pp. 13–14) | VERIFIED (Design) |
-| D-03 | Use `Qwen/Qwen2.5-3B-Instruct` (float16, greedy decoding, seed 42) on Google Colab T4 GPU (16 GB VRAM). | Fits cleanly in 16 GB VRAM without quantization dependency errors and enforces deterministic greedy decoding (`do_sample=False`). | Colab Hardware Spec & Assignment Sec. 2 Reproducibility Rule | VERIFIED (Config) |
+| ID | Decision | Rationale | Status |
+|---|---|---|---|
+| D-01 | Focus on H1 qualifier retention and H4 contradiction handling under corpus-scale and position changes. | Tests two failure modes identified in the review through controlled positional shifts. | Literature-motivated |
+| D-02 | Compare Full Context, Dense RAG, and the Figure 2 edge-reordering + claim-verification pipeline. | Separates context exposure, retrieval selection and evidence-aware synthesis. | Design frozen |
+| D-03 | Use PubMedQA `pqa_labeled`, Qwen2.5-3B-Instruct, BGE-small-en-v1.5 and DeBERTa NLI. | Matches the implementation pathway described in the assignment handout. | Configured; pin exact revisions at run time |
+| D-04 | Use greedy decoding, fixed seed 42 and max_new_tokens 300. | Reduces sampling variance and follows the documented correction to the earlier 180-token truncation issue. | Configured |
+| D-05 | Evaluate headline coverage, H1 qualifier retention, H4 contradiction detection, H3 NLI citation faithfulness and latency separately. | Makes information retention, conflict handling, attribution and computation independently visible. | Metrics implemented; audit after real run |
+| D-06 | Label Study B's contradictory replication as synthetic controlled content. | The assignment's cluster-generation protocol inserts a counterfactual contradiction; it is not a source-record finding. | Integrity requirement |
+| D-07 | Do not fabricate missing result files or claim unexecuted 405-condition runs. | The initial repository tree did not include the advertised run-level CSV/JSON artifacts. | Integrity requirement |
+
+## Frozen factorial design
+
+- Corpus sizes: (k in {5,15,25})
+- Target pair positions: start, middle, end
+- Systems: Full Context, Dense RAG (top-4), Proposed Figure 2 pipeline
+- Pilot: 5 clusters = 135 runs
+- Extended run: 15 clusters = 405 runs
