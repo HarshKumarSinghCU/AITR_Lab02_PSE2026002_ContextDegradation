@@ -33,3 +33,15 @@
 - **Required Fix for Gate G3 (`N_CLUSTERS = 15`):**
   1. Expand citation parser to capture all document IDs inside `[Doc 1, Doc 2]` or `[Doc 1][Doc 2]`, and strip citation brackets from the hypothesis sentence before NLI scoring.
   2. Score NLI attribution faithfulness using **Non-Contradiction / Entailment Support** (`P(entailment) > P(contradiction)` and `P(contradiction) < 0.20`), and trigger Stage-B re-synthesis only when cited document coverage is missing or `P(contradiction) >= 0.25`.
+
+
+
+## 3. Reproducibility audit for the repository update (18 November 2026)
+
+The figures and metrics above are retained as historical results reported in the prior project notes and supplied assignment material. During the repository inspection for this update, the advertised raw result CSV/JSON files and figure artifacts were not present in the Git tree. The values above could therefore not be recalculated or independently checked against their run-level records in this update.
+
+A new controlled pipeline has been added in \`src/experiment_pipeline.py\`. It writes a fresh \`results/experiment_results.csv\`, \`results/summary_metrics.csv\`, and \`results/run_metadata.json\` when executed. The new output must be treated as a separate run and compared with these historical notes only after inspecting its actual manifest, condition count, and metric calculations.
+
+The benchmark construction includes an explicitly labelled synthetic contradictory Study B stimulus, as specified by the assignment's cluster-construction example. Its counterfactual finding and example p-value are experimental stimuli, not extracted findings from a real PubMedQA paper.
+
+**Status of this code update:** code and documentation committed on a feature branch; no Colab model run was performed during this repository edit. Runtime compatibility, dataset schema, output completeness, and metric validity remain to be checked by executing the notebook on the target Colab runtime.
