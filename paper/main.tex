@@ -1,0 +1,40 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=0.72in]{geometry}
+\usepackage{booktabs,amsmath,graphicx,hyperref}
+\title{Empirical Evaluation of Positional Degradation and Evidence-Aware Multi-Document Research Synthesis}
+\author{Harsh Kumar Singh\\IIIT Allahabad}
+\date{November 2026}
+\begin{document}
+\maketitle
+\begin{abstract}
+This reproducibility draft specifies a controlled factorial evaluation of context-window degradation in multi-document research synthesis. It varies document count $k\in\{5,15,25\}$ and target-pair position (start, middle, end), and compares full-context synthesis, dense retrieval, and an edge-salience pipeline with NLI verification. Metrics separate headline coverage, methodological-qualifier retention (H1), citation faithfulness (H3), contradiction detection (H4), and latency. The code and notebook are provided in this repository. No new quantitative result is claimed here: the updated pipeline must be run and its output CSV audited before the results section can be finalized.
+\end{abstract}
+\section{Introduction}
+Long context capacity does not guarantee uniform use of every input passage. Prior work has demonstrated positional sensitivity in long-context question answering, with relevant information in the middle of an input often harder to use than information near the beginning or end \cite{liu2024lost}. In research synthesis, such failures can omit methodological restrictions or contradictory findings while producing fluent summaries.
+\section{Research Question and Hypotheses}
+This study asks how corpus size and target-evidence position affect qualifier retention and contradiction detection, and whether edge-salience ordering with claim verification mitigates these failures.
+\begin{itemize}
+\item H1: methodological or subgroup qualifiers in the target study are lost more often when the target pair occurs in the middle of larger contexts.
+\item H3: citation attribution faithfulness varies across full-context, retrieval, and evidence-aware systems.
+\item H4: conflicting findings are more likely to be smoothed into consensus as context size increases or target evidence is displaced.
+\end{itemize}
+\section{Dataset and Controlled Stimuli}
+The code downloads the \texttt{pqa\_labeled} split of PubMedQA at runtime \cite{jin2019pubmedqa}. Each cluster includes a positive target (Study A), a contradictory target (Study B), and $k-2$ topical distractors. Study A is built from a yes-labelled source record and contains a controlled subgroup qualifier. Study B uses a no-labelled record as background and includes a clearly marked synthetic contradictory-replication sentence. The inserted contradiction and illustrative p-value are benchmark interventions, not findings extracted from a published PubMedQA article. Distractors are deterministically sampled from maybe-labelled records using lexical overlap with the target question.
+The paired targets are placed together at the start, middle, or end. Corpus sizes are $k\in\{5,15,25\}$. Five clusters yield 135 system-condition records; 15 clusters yield 405.
+\section{Compared Systems}
+\begin{enumerate}
+\item \textbf{Full Context:} all documents in original order.
+\item \textbf{Dense RAG:} the four most relevant passages, selected with dense embeddings \cite{lewis2020rag,reimers2019sbert}.
+\item \textbf{Proposed Figure 2:} rank all passages, alternately place high-ranked passages at prompt edges, generate a draft, then verify it against the two highest-ranked passages with a DeBERTa NLI cross-encoder \cite{he2021deberta}. If the entailment threshold (0.45) is not met, regenerate using the focused pair.
+\end{enumerate}
+\section{Evaluation}
+Headline recall measures overlap between target long-answer keywords and generated text. H1 and H4 use controlled binary lexical checks (100 if a marker is present, otherwise 0); these measures are proxies rather than semantic judgements. H3 is the percentage of cited sentences for which at least one cited document receives an NLI entailment score of 0.45 or higher. Latency measures system execution time, including retrieval and verification when applicable. NLI scores are not calibrated probabilities.
+\section{Results and Reproducibility Status}
+The original project notes include historical pilot observations, but the repository tree inspected for this update did not contain the advertised run-level CSV/JSON artifacts needed to independently recalculate them. They remain historical reported observations in \texttt{baseline\_validation.md}. This branch adds code to write \texttt{results/experiment\_results.csv}, \texttt{results/summary\_metrics.csv}, and \texttt{results/run\_metadata.json}. Figures are generated only from measured CSV output. New numerical conclusions must be added after the 135-run pilot has executed and its condition count, document manifests, and metric calculations have been audited.
+\section{Limitations and Conclusion}
+The contradictory Study B sentence is synthetic and does not establish a real biomedical conflict. The current H1 and H4 measures are lexical proxies and need human annotation. NLI verification can misclassify paraphrases and its threshold requires calibration. This manuscript is therefore a protocol/reproducibility draft rather than a completed empirical report. The implementation separates coverage, qualifier retention, contradiction detection, citation support, and latency so that the extended evaluation can assess the trade-offs transparently.
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}
