@@ -30,7 +30,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = yaml.safe_load((ROOT / "configs" / "exp_config.yaml").read_text(encoding="utf-8"))
 RESULTS = ROOT / "results"
-CITATION_RE = re.compile(r"\[Doc\s*([0-9,\s]+)\]", re.IGNORECASE)
+CITATION_GROUP_RE = re.compile(r"\[([^\]]*)\]", re.IGNORECASE)
+DOC_ID_RE = re.compile(r"\bDoc\s*(\d+)\b", re.IGNORECASE)
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 
 
@@ -161,16 +162,32 @@ def make_stimulus_clusters(groups: dict[str, list[dict[str, Any]]],
     return clusters
 
 
-def assemble_prompt_docs(cluster: dict[str, Any], k: int,
-                         position: str) -> list[dict[str, Any]]:
-    """Place Study A and Study B together at start/middle/end among k-2 distractors."""
+def assemble_prompt_docs(cluster: dict[str, Any], k: int, position: str) -> list[dict[str, Any]]:
+    """Assemble exactly k documents with the positive/negative target pair at a controlled position.
+
+    The two target documents remain adjacent so their relative order is fixed;
+    only the pair's position within the larger context changes.
+    """
     distractors = cluster["distractors"][:k - 2]
+    if len(distractors) != k - 2:
+        raise ValueError(
+            f"Cluster {cluster.get('cluster_id', '<unknown>')} has only "
+            f"{len(distractors)} distractors; {k - 2} are required for k={k}."
+        )
+
     pair = [
-        {"text": cluster["paper_pos"], "role": "positive_target",
-         "source_id": cluster["positive_source_id"]},
-        {"text": cluster["paper_neg"], "role": "contradictory_target",
-         "source_id": cluster["negative_source_id"]},
+        {
+            "text": cluster["paper_pos"],
+            "role": "positive_target",
+            "source_id": cluster["positive_source_id"],
+        },
+        {
+            "text": cluster["paper_neg"],
+            "role": "contradictory_target",
+            "source_id": cluster["negative_source_id"],
+        },
     ]
+
     if position == "start":
         ordered = pair + distractors
     elif position == "end":
@@ -179,23 +196,37 @@ def assemble_prompt_docs(cluster: dict[str, Any], k: int,
         midpoint = len(distractors) // 2
         ordered = distractors[:midpoint] + pair + distractors[midpoint:]
     else:
-        raise ValueError(f"Unsupported target position: {position}")
+        raise ValueError(
+            f"Unknown target position: {position!r}. "
+            "Expected 'start', 'middle', or 'end'."
+        )
 
-    docs = []
-    for i, item in enumerate(ordered, start=1):
-        docs.append({**item, "doc_id": i})
-    assert len(docs) == k
-    positive_index = next(i for i, d in enumerate(docs) if d["role"] == "positive_target")
-    negative_index = next(i for i, d in enumerate(docs) if d["role"] == "contradictory_target")
-    if position == "start":
-        assert (positive_index, negative_index) == (0, 1)
-    elif position == "end":
-        assert (positive_index, negative_index) == (k - 2, k - 1)
-    else:
-        assert positive_index == len(distractors) // 2
-        assert negative_index == positive_index + 1
+    docs = [
+        {
+            "doc_id": i,
+            "text": item["text"],
+            "role": item["role"],
+            "source_id": item["source_id"],
+        }
+        for i, item in enumerate(ordered, start=1)
+    ]
+    if len(docs) != k:
+        raise AssertionError(f"Expected {k} documents, assembled {len(docs)}.")
+
+    positive_index = next(i for i, doc in enumerate(docs)
+                          if doc["role"] == "positive_target")
+    negative_index = next(i for i, doc in enumerate(docs)
+                          if doc["role"] == "contradictory_target")
+    if negative_index != positive_index + 1:
+        raise AssertionError("Positive and contradictory targets must remain adjacent.")
+    if position == "start" and positive_index != 0:
+        raise AssertionError("Target pair is not at the start.")
+    if position == "end" and positive_index != k - 2:
+        raise AssertionError("Target pair is not at the end.")
+    if position == "middle" and positive_index != (k - 2) // 2:
+        raise AssertionError("Target pair is not at the middle.")
+
     return docs
-
 
 def load_models() -> dict[str, Any]:
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -295,41 +326,78 @@ def alternating_edge_order(ranked: list[int]) -> list[int]:
 
 
 def run_system(models: dict[str, Any], system: str, question: str,
-               docs: list[dict[str, Any]], max_new_tokens: int) -> tuple[str, float]:
+               docs: list[dict[str, Any]], max_new_tokens: int
+               ) -> tuple[str, float, list[dict[str, Any]]]:
+    """Return the exact evidence documents supplied to the final answer generator."""
     start = time.perf_counter()
     if system == "Baseline_1_FullContext":
-        answer = generate(models, question, docs, max_new_tokens)
+        evidence_docs = docs
+        answer = generate(models, question, evidence_docs, max_new_tokens)
     elif system == "Baseline_2_DenseRAG":
         ranked, _ = rank_docs(models, question, docs)
-        selected = [docs[i] for i in ranked[:min(4, len(ranked))]]
-        answer = generate(models, question, selected, max_new_tokens)
+        evidence_docs = [docs[i] for i in ranked[:min(4, len(ranked))]]
+        answer = generate(models, question, evidence_docs, max_new_tokens)
     elif system == "Proposed_Fig2_Verified":
         ranked, _ = rank_docs(models, question, docs)
         reordered = [docs[i] for i in alternating_edge_order(ranked)]
         draft = generate(models, question, reordered, max_new_tokens)
 
-        # Stage B: verify the generated draft against the two most relevant studies.
-        top_two = ranked[:min(2, len(ranked))]
-        verifier = models["verifier"]
-        pairs = [(docs[i]["text"], draft) for i in top_two]
-        probabilities = verifier.predict(pairs, apply_softmax=True)
-        entail_idx, _ = nli_label_indices(verifier)
-        entailment_scores = [float(row[entail_idx]) for row in np.atleast_2d(probabilities)]
-        if not entailment_scores or min(entailment_scores) < 0.45:
-            focused_docs = [docs[i] for i in top_two]
-            answer = generate(models, question, focused_docs, max_new_tokens)
-        else:
+        # Stage B checks citation coverage and contradiction, not whole-draft entailment.
+        # A multi-document synthesis need not be entailed by each individual paper.
+        if verify_draft_citations(models["verifier"], draft, reordered):
             answer = draft
+            evidence_docs = reordered
+        else:
+            focused_docs = [docs[i] for i in ranked[:min(2, len(ranked))]]
+            answer = generate(models, question, focused_docs, max_new_tokens)
+            evidence_docs = focused_docs
     else:
         raise ValueError(f"Unknown system: {system}")
-    return answer, time.perf_counter() - start
+    return answer, time.perf_counter() - start, evidence_docs
 
 
 def citation_ids(sentence: str) -> list[int]:
+    """Extract every document ID from [Doc 1], [Doc 1, Doc 2], or adjacent tags."""
     found: list[int] = []
-    for group in CITATION_RE.findall(sentence):
-        found.extend(int(n) for n in re.findall(r"\d+", group))
+    for match in CITATION_GROUP_RE.finditer(sentence):
+        group = match.group(1)
+        if re.search(r"\bDoc\b", group, flags=re.IGNORECASE):
+            found.extend(int(n) for n in DOC_ID_RE.findall(group))
     return sorted(set(found))
+
+
+def strip_citations(sentence: str) -> str:
+    """Remove document citation groups before sending a claim to the NLI model."""
+    return CITATION_GROUP_RE.sub(
+        lambda match: "" if re.search(r"\bDoc\s*\d+", match.group(1), re.IGNORECASE)
+        else match.group(0),
+        sentence,
+    ).strip()
+
+
+def verify_draft_citations(verifier: CrossEncoder, answer: str,
+                           docs: list[dict[str, Any]],
+                           contradiction_threshold: float = 0.25) -> bool:
+    """Require valid citations on every sentence and reject strong cited contradictions."""
+    doc_map = {doc["doc_id"]: doc for doc in docs}
+    sentences = [s.strip() for s in SENTENCE_RE.split(answer) if s.strip()]
+    if not sentences:
+        return False
+
+    entail_idx, contradiction_idx = nli_label_indices(verifier)
+    for sentence in sentences:
+        ids = citation_ids(sentence)
+        if not ids or any(doc_id not in doc_map for doc_id in ids):
+            return False
+        claim = strip_citations(sentence)
+        if not claim:
+            return False
+        pairs = [(doc_map[doc_id]["text"], claim) for doc_id in ids]
+        probabilities = np.atleast_2d(verifier.predict(pairs, apply_softmax=True))
+        if any(float(row[contradiction_idx]) >= contradiction_threshold
+               for row in probabilities):
+            return False
+    return True
 
 
 def h3_citation_faithfulness(models: dict[str, Any], answer: str,
@@ -338,21 +406,25 @@ def h3_citation_faithfulness(models: dict[str, Any], answer: str,
     doc_map = {doc["doc_id"]: doc for doc in docs}
     sentences = [s.strip() for s in SENTENCE_RE.split(answer) if s.strip()]
     tested = supported = 0
-    entail_idx, _ = nli_label_indices(models["verifier"])
+    entail_idx, contradiction_idx = nli_label_indices(models["verifier"])
     for sentence in sentences:
         ids = citation_ids(sentence)
         if not ids:
             continue
-        cited_docs = [doc_map[i] for i in ids if i in doc_map]
         tested += 1
-        if not cited_docs:
+        cited_docs = [doc_map[i] for i in ids if i in doc_map]
+        if len(cited_docs) != len(ids):
             continue
-        claim = CITATION_RE.sub("", sentence).strip()
+        claim = strip_citations(sentence)
         if not claim:
             continue
         pairs = [(doc["text"], claim) for doc in cited_docs]
-        scores = models["verifier"].predict(pairs, apply_softmax=True)
-        if any(float(row[entail_idx]) >= 0.45 for row in np.atleast_2d(scores)):
+        scores = np.atleast_2d(models["verifier"].predict(pairs, apply_softmax=True))
+        if any(
+            float(row[entail_idx]) > float(row[contradiction_idx])
+            and float(row[contradiction_idx]) < 0.20
+            for row in scores
+        ):
             supported += 1
     return round(100.0 * supported / tested, 2) if tested else 0.0
 
@@ -394,10 +466,11 @@ def run_experiment(n_clusters: int, seed: int, max_new_tokens: int) -> pd.DataFr
             for position in positions:
                 docs = assemble_prompt_docs(cluster, int(k), position)
                 for system in systems:
-                    answer, latency = run_system(
+                    answer, latency, evidence_docs = run_system(
                         models, system, cluster["question"], docs, max_new_tokens
                     )
-                    metrics = score_output(models, answer, docs, cluster)
+                    # Evaluate citations only against evidence actually shown to this system.
+                    metrics = score_output(models, answer, evidence_docs, cluster)
                     rows.append({
                         "cluster_id": cluster["cluster_id"],
                         "k_docs": int(k),
@@ -408,7 +481,7 @@ def run_experiment(n_clusters: int, seed: int, max_new_tokens: int) -> pd.DataFr
                         "generated_text": answer,
                         "document_manifest": json.dumps([
                             {"doc_id": d["doc_id"], "role": d["role"],
-                             "source_id": d["source_id"]} for d in docs
+                             "source_id": d["source_id"]} for d in evidence_docs
                         ]),
                     })
                     completed += 1

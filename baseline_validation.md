@@ -45,3 +45,14 @@ A new controlled pipeline has been added in \`src/experiment_pipeline.py\`. It w
 The benchmark construction includes an explicitly labelled synthetic contradictory Study B stimulus, as specified by the assignment's cluster-construction example. Its counterfactual finding and example p-value are experimental stimuli, not extracted findings from a real PubMedQA paper.
 
 **Status of this code update:** code and documentation committed on a feature branch; no Colab model run was performed during this repository edit. Runtime compatibility, dataset schema, output completeness, and metric validity remain to be checked by executing the notebook on the target Colab runtime.
+
+
+## Follow-up implementation correction note (18 November 2026)
+
+The feature branch now includes the following corrections to the earlier H3/verification concerns described above:
+
+1. Grouped citations (for example, `[Doc 1, Doc 2]`) and adjacent citation tags are parsed; citation tags are stripped from claim text before NLI inference.
+2. Citation support is checked only against the documents actually supplied to the system being evaluated. In particular, Dense RAG no longer receives credit for citations supported only by documents it did not retrieve.
+3. The proposed verifier checks citation coverage and cited-claim contradiction, with focused regeneration at contradiction score >= 0.25. H3 counts a cited sentence as supported when at least one cited document has entailment greater than contradiction and contradiction below 0.20.
+
+These are implementation changes, not new experimental findings. The regression tests and full Colab pilot remain to be run; historical results above are not retroactively validated by these changes.

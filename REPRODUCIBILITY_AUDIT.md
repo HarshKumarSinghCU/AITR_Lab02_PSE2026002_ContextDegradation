@@ -44,3 +44,16 @@ The repository contained the top-level project README, configuration, and proven
 | Final manuscript numerical tables and PDF | Pending |
 
 No experiment was run as part of the repository edit. The PR must not be interpreted as evidence that the runtime, models, or metrics have already been empirically validated.
+
+
+## Follow-up code review fixes (18 November 2026)
+
+A second source review identified and corrected three implementation issues on this branch:
+
+- Citation parsing now handles grouped tags such as `[Doc 1, Doc 2]` and adjacent tags such as `[Doc 1][Doc 2]`; citation markers are removed before NLI scoring.
+- H3 citation faithfulness is now evaluated only against documents supplied to the relevant system. Dense RAG is therefore evaluated against its retrieved top-four set rather than the full unseen context.
+- Proposed-system Stage B now checks sentence-level citation coverage and cited-claim contradiction. It triggers focused regeneration for missing/invalid citations or a cited pair with contradiction score at least 0.25. H3 uses entailment greater than contradiction and contradiction below 0.20.
+
+Regression tests were added for grouped/adjacent citations, citation stripping, unknown document IDs, and contradiction-triggered verification. The Colab setup cell now fetches/updates an existing checkout instead of failing on a repeated clone.
+
+**Verification boundary:** these edits were committed to the feature branch, but the Python test suite and live Colab/T4 experiment have not yet been executed in this editing session. Run the notebook's sanity/test cell first; do not treat these source fixes as a successful runtime test.
