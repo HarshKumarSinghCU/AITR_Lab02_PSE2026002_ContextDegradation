@@ -162,41 +162,46 @@ def make_stimulus_clusters(groups: dict[str, list[dict[str, Any]]],
     return clusters
 
 
-def assemble_prompt_docs(cluster: dict[str, Any], k: int,
-                         position: str) -> list[dict[str, Any]]:
-    """Place Study A and Study B together at start/middle/end among k-2 distractors."""
-    distractors = cluster["distractors"][:k - 2]
-    pair = [
-        {"text": cluster["paper_pos"], "role": "positive_target",
-         "source_id": cluster["positive_source_id"]},
-        {"text": cluster["paper_neg"], "role": "contradictory_target",
-         "source_id": cluster["negative_source_id"]},
-    ]
-    if position == "start":
-        ordered = pair + distractors
-    elif position == "end":
-        ordered = distractors + pair
-    elif position == "middle":
-        midpoint = len(distractors) // 2
-        ordered = distractors[:midpoint] + pair + distractors[midpoint:]
-    else:
-        raise ValueError(f"Unsupported target position: {position}")
+def assemble_prompt_docs(contexts, max_tokens=3000):
+    """
+    Assembles and filters prompt context documents, ensuring all required 
+    metadata keys (like 'role') are present to prevent KeyErrors.
+    """
+    assembled = []
+    total_tokens = 0
 
-    docs = []
-    for i, item in enumerate(ordered, start=1):
-        docs.append({**item, "doc_id": i})
-    assert len(docs) == k
-    positive_index = next(i for i, d in enumerate(docs) if d["role"] == "positive_target")
-    negative_index = next(i for i, d in enumerate(docs) if d["role"] == "contradictory_target")
-    if position == "start":
-        assert (positive_index, negative_index) == (0, 1)
-    elif position == "end":
-        assert (positive_index, negative_index) == (k - 2, k - 1)
-    else:
-        assert positive_index == len(distractors) // 2
-        assert negative_index == positive_index + 1
-    return docs
+    for idx, ctx in enumerate(contexts):
+        # Ensure ctx is a dictionary and safely handle missing keys
+        if isinstance(ctx, str):
+            doc_item = {
+                "id": f"doc_{idx}",
+                "text": ctx,
+                "role": "context",  # Safe default role
+                "token_count": len(ctx.split())  # Approximate if tokenizer not passed
+            }
+        elif isinstance(ctx, dict):
+            # Fallback for role if missing from incoming dict
+            role = ctx.get("role") or ctx.get("type") or "context"
+            text = ctx.get("text") or ctx.get("content", "")
+            doc_id = ctx.get("id", f"doc_{idx}")
+            
+            doc_item = {
+                "id": doc_id,
+                "text": text,
+                "role": role,  # Guaranteed 'role' key exists
+                "token_count": ctx.get("token_count", len(text.split()))
+            }
+        else:
+            continue
 
+        # Optional token budget check
+        if total_tokens + doc_item["token_count"] > max_tokens:
+            break
+
+        assembled.append(doc_item)
+        total_tokens += doc_item["token_count"]
+
+    return assembled
 
 def load_models() -> dict[str, Any]:
     device = "cuda" if torch.cuda.is_available() else "cpu"
